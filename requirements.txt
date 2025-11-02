@@ -2,5 +2,5 @@ streamlit
 pandas
 matplotlib
 numpy
-pandas_datareader
+pandas-datareader
 datetime

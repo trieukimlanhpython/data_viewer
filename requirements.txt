@@ -4,3 +4,4 @@ matplotlib
 numpy
 pandas_datareader
 datetime
+setuptools==68.2.2

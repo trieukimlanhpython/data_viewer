@@ -4,5 +4,3 @@ matplotlib
 numpy
 pandas_datareader
 datetime
-io
-re

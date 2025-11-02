@@ -14,9 +14,6 @@ import numpy as np
 import datetime as dt
 from io import BytesIO
 import re
-from packaging.version import Version
-LooseVersion = Version
-
 # ==========================================================
 # ⚙️ CONFIG
 # ==========================================================

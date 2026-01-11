@@ -12,7 +12,6 @@ import matplotlib.pyplot as plt
 from pandas_datareader import wb
 import numpy as np
 import datetime as dt
-from io import BytesIO
 import re
 
 
@@ -282,7 +281,7 @@ elif gs_desc_link.strip():
 
 # ✅ Chỉ hiển thị bảng mô tả ở đây một lần
 if not df_desc.empty:
-    st.markdown("### 📊 Thông tin mô tả")
+    st.markdown("📊 Thông tin mô tả")
     st.dataframe(df_desc, height=180, use_container_width=True)
 
 
@@ -470,14 +469,14 @@ if st.session_state["mode"] == "MACRO":
         # =========================
         with tab_data:
             st.markdown("📊 Dữ liệu đã tải")
-            st.dataframe(df_display, height=350, use_container_width=True)
+            st.dataframe(df_display, use_container_width=True)
             
         # =========================
         # TAB 2 – THỐNG KÊ MÔ TẢ
         # =========================
         with tab_desc:
             st.markdown("🧾 Thống kê mô tả")
-            st.dataframe(df_display.describe(), height=350, use_container_width=True)
+            st.dataframe(df_display.describe(), use_container_width=True)
     
         # =========================
         # TAB 3 – BIỂU ĐỒ
@@ -664,17 +663,23 @@ if st.session_state["mode"] == "MACRO":
 # =========== LẬP TRÌNH TÀI CHÍNH ===========
 st.sidebar.subheader("📥 Dữ liệu Lập trình tài chính (IMF)")
 
+# File uploader
 fp_file = st.sidebar.file_uploader(
     "📂 Upload CSV FP (wide format, có cột sector)",
     type="csv"
 )
 
-if st.sidebar.button("🚀 Tải dữ liệu FP"):
-    if fp_file is None:
-        st.sidebar.error("❌ Vui lòng upload file CSV.")
-        st.stop()
+# Đường dẫn mặc định nếu không upload
+default_fp_file = '/Users/trieukimlanh/Library/CloudStorage/OneDrive-Personal/0. Research Projects onedrive/Macroeconomic reports/Tập 16/Vietnam FPP.csv'
 
-    df_fp = pd.read_csv(fp_file)
+# Nút tải dữ liệu
+if st.sidebar.button("🚀 Tải dữ liệu FP"):
+
+    # Nếu user upload file thì dùng file upload, nếu không thì dùng đường dẫn mặc định
+    fp_file_to_load = fp_file if fp_file is not None else default_fp_file
+
+    # Đọc CSV
+    df_fp = pd.read_csv(fp_file_to_load)
 
     # ---- kiểm tra cột bắt buộc ----
     required_cols = {"sector", "indicator", "unit"}
@@ -688,28 +693,40 @@ if st.sidebar.button("🚀 Tải dữ liệu FP"):
         st.sidebar.error("❌ sector chỉ được nhận giá trị 1–4.")
         st.stop()
 
-    # ---- tách theo sector (GIỮ DẠNG WIDE) ----
-    st.session_state["fp_data"] = {
+    # ---- tách theo sector (giữ dạng wide) ----
+    fp_data = {
         1: df_fp[df_fp["sector"] == 1],
         2: df_fp[df_fp["sector"] == 2],
         3: df_fp[df_fp["sector"] == 3],
         4: df_fp[df_fp["sector"] == 4],
     }
 
+    # ---- lưu vào session_state để các tab khác dùng ----
+    st.session_state["fp_data"] = fp_data
+    st.session_state["unit_map"] = dict(zip(df_fp["indicator"], df_fp["unit"]))
     st.session_state["fp_loaded"] = True
+
     st.sidebar.success("✅ Đã tải dữ liệu FP thành công!")
-        
+
+# Nếu muốn load trực tiếp từ file mặc định (không cần bấm nút)
+if "fp_data" not in st.session_state:
+    df_fp = pd.read_csv(default_fp_file)
+    st.session_state["fp_data"] = {
+        1: df_fp[df_fp["sector"] == 1],
+        2: df_fp[df_fp["sector"] == 2],
+        3: df_fp[df_fp["sector"] == 3],
+        4: df_fp[df_fp["sector"] == 4],
+    }
+    st.session_state["unit_map"] = dict(zip(df_fp["indicator"], df_fp["unit"]))
+    st.session_state["fp_loaded"] = True
+
+# =========================
+# LOAD DATA CHO CÁC TAB
+# =========================
 if st.session_state["mode"] == "FP":
     st.subheader("📘 Macroeconomic Diagnosis (IMF Style)")
     st.caption("Diagnostic & Narrative: Real – External – Fiscal – Monetary")
 
-    if "fp_data" not in st.session_state:
-        st.warning("⚠️ Vui lòng upload dữ liệu FP trước.")
-        st.stop()
-
-    # =========================
-    # LOAD DATA
-    # =========================
     df_real = st.session_state["fp_data"][1]
     df_ext = st.session_state["fp_data"][2]
     df_fiscal = st.session_state["fp_data"][3]
@@ -722,10 +739,11 @@ if st.session_state["mode"] == "FP":
         "💰 Monetary",
         "🔗 FPP"
     ])
+
     
     from collections import defaultdict
     import matplotlib.pyplot as plt
-   
+    from matplotlib.ticker import MaxNLocator
     def render_fp_tab(df, sector_name, description):
         st.subheader(sector_name)
         st.markdown(description)
@@ -746,11 +764,8 @@ if st.session_state["mode"] == "FP":
         if not selected:
             st.info("Hãy chọn ít nhất một chỉ tiêu để hiển thị.")
             return
-        unit_map = (
-            df[df["indicator"].isin(selected)]
-            .set_index("indicator")["unit"]
-            .to_dict()
-        )
+        unit_map = {ind: st.session_state["unit_map"][ind] for ind in selected}
+
         groups = defaultdict(list)
         for ind in selected:
             groups[unit_map[ind]].append(ind)
@@ -1091,18 +1106,9 @@ if st.session_state["mode"] == "FP":
             - Chính sách tiền tệ có đủ chặt?
             """
         )
-
-
-    
-    #========TAB5: FPP============
+   
+    #========TAB5: FPP============  
     with tab_fpp:
-        # STEP 1 – Variable mapping (Accounting identity)
-        # Mapping biến IMF:
-        #        Fiscal balance → (S − I)_government
-        #       CAB → External balance
-        #       GDP danh nghĩa → scale / consistency
-        # IMF gọi bước này là: “Identification of macroeconomic aggregates”
-        
         # ---- chuẩn hoá sang long ----
         def to_long(df):
             year_cols = [c for c in df.columns if c.isdigit()]
@@ -1122,245 +1128,1066 @@ if st.session_state["mode"] == "FP":
             ],
             axis=0
         )
-
-    #======tab5: fpp=========
-    with tab_fpp:
-        st.subheader("🧾 Macroeconomic Assessment Summary")
+        # =========================
+        # Helper functions (GIỮ NGUYÊN LOGIC BẠN)
+        # =========================
+        def find_indicator(df, keyword_list):
+            for ind in df["indicator"]:
+                name = ind.lower()
+                if all(k.lower() in name for k in keyword_list):
+                    return ind
+            return None
     
-        st.markdown("""
-        Tổng hợp chẩn đoán kinh tế vĩ mô dựa trên xu hướng,
-        quy mô và tín hiệu chính sách (IMF workshop style).
-        """)
-    
-        # Ví dụ narrative đơn giản
-        #st.markdown("""
-        #- **Tăng trưởng** duy trì tích cực nhưng xuất hiện áp lực giá.
-        #- **Đối ngoại** cần theo dõi do cán cân vãng lai suy yếu.
-        #- **Tài khóa** đang nới lỏng, nợ công có xu hướng tăng.
-        #- **Tiền tệ** cần thận trọng trước tăng trưởng tín dụng.
-        #""")
-
-
-        st.markdown("📌 Mapping biến IMF - Accounting identity")
-        st.latex(r"(S-I)_{private} + (S-I)_{government} = CAB")
-        # STEP 2 – Government saving–investment
-        # (S−I)_government ​= Fiscal Balance
-        st.latex(r"(S - I)_{\text{government}} = \text{Fiscal Balance}")
-        # STEP 3 – Private saving–investment (Residual)
-        # (S−I)_private = CAB − (S−I)_government​
-        st.latex(r"(S - I)_{\text{private}} = \text{CAB} - (S - I)_{\text{government}}")
-        
-        fiscal_ind = st.selectbox(
-            "Fiscal balance",
-            df_long[df_long["sector"] == 3]["indicator"].unique()
-        )
-    
-        cab_ind = st.selectbox(
-            "Current Account Balance (CAB)",
-            df_long[df_long["sector"] == 2]["indicator"].unique()
-        )
-    
-        gdp_candidates = df_long[
-            (df_long["indicator"].str.contains("Gross domestic product")) &
-            (df_long["indicator"].str.contains("Current prices")) &
-            (df_long["indicator"].str.contains("Domestic currency")) &
-            (~df_long["indicator"].str.contains("Fiscal year", case=False)) &
-            (~df_long["indicator"].str.contains("per capita", case=False))
-        ]["indicator"].unique()
-
-        gdp_ind = st.selectbox(
-            "Nominal GDP (IMF standard)",
-            gdp_candidates
-        )
-
-    
-        def series(ind):
-            return (
-                df_long[df_long["indicator"] == ind]
-                .set_index("year")["value"]
+        def get_series(df, indicator):
+            if indicator is None:
+                return None
+            year_cols = [c for c in df.columns if c.isdigit()]
+            s = (
+                df[df["indicator"] == indicator]
+                .set_index("indicator")[year_cols]
+                .T
                 .astype(float)
+                .iloc[:, 0]
+            )
+            s.index = s.index.astype(int)
+            return s.sort_index()
+        
+        # =========================
+        # HÀM CHUNG VẼ ĐỒ THỊ THEO UNIT
+        # =========================
+        import matplotlib.pyplot as plt
+        import streamlit as st
+        
+        def plot_fpp_chart(plot_df, unit_map=None, display_to_original=None, title="🔗 FPP Chart"):
+            """
+            plot_df: DataFrame, index là years, columns là series
+            unit_map: dict, key=series_name, value=unit từ dữ liệu gốc
+            title: tiêu đề chart
+            """
+            
+            if unit_map is None:
+                # Lấy từ session_state nếu đã load
+                unit_map = st.session_state.get("unit_map", {})
+                
+            if plot_df.empty:
+                st.warning("No data to plot.")
+                return
+            
+            # =========================
+            # Helper: lấy unit
+            # =========================
+            if display_to_original is None:
+                display_to_original = {}
+            def get_unit(col):
+                original_name = display_to_original.get(col, col)
+                return unit_map.get(original_name, "Other")
+        
+            # =========================
+            # Tạo groups tự động: unit -> list series
+            # =========================
+            from collections import defaultdict
+
+            groups = defaultdict(list)
+            for col in plot_df.columns:
+                groups[get_unit(col)].append(col)
+    
+            from matplotlib.ticker import MaxNLocator
+            # =========================
+            # CASE 1: 1 UNIT
+            # =========================
+            if len(groups) == 1:
+                fig, ax = plt.subplots(figsize=(5, 2))
+                for unit, inds in groups.items():
+                    for ind in inds:
+                        s = plot_df[ind].dropna()
+                        ax.plot(s.index, s.values, label=ind)
+        
+                ax.yaxis.get_offset_text().set_fontsize(5)
+                ax.grid(True)
+                ax.tick_params(axis='both', labelsize=5)
+                ax.legend(fontsize=5)
+                ax.set_title(title, fontsize=6)
+                ax.xaxis.set_major_locator(MaxNLocator(integer=True))
+                plt.xticks(rotation=45)
+                st.pyplot(fig)
+        
+            # =========================
+            # CASE 2: 2 UNITS (DUAL AXIS)
+            # =========================
+            elif len(groups) == 2:
+                fig, ax1 = plt.subplots(figsize=(5, 2))
+                plt.xticks(rotation=45)
+        
+                units = list(groups.keys())
+                left_unit, right_unit = units[0], units[1]
+        
+                # Trục trái
+                for ind in groups[left_unit]:
+                    if ind in plot_df.columns:
+                        s = plot_df[ind].dropna()
+                        ax1.plot(s.index, s.values, label=ind)
+        
+                ax1.tick_params(axis='both', labelsize=5)
+                ax1.yaxis.get_offset_text().set_fontsize(5)
+        
+                # Trục phải
+                ax2 = ax1.twinx()
+                for ind in groups[right_unit]:
+                    if ind in plot_df.columns:
+                        s = plot_df[ind].dropna()
+                        ax2.plot(s.index, s.values, linestyle="--", label=ind)
+        
+                ax2.tick_params(axis='y', labelsize=5)
+                ax2.yaxis.get_offset_text().set_fontsize(5)
+        
+                # Kết hợp legend
+                lines1, labels1 = ax1.get_legend_handles_labels()
+                lines2, labels2 = ax2.get_legend_handles_labels()
+                ax1.legend(lines1 + lines2, labels1 + labels2, loc="upper left", fontsize=5)
+                ax1.grid(True)
+                ax1.set_title(title, fontsize=6)
+                ax1.xaxis.set_major_locator(MaxNLocator(integer=True))
+                st.pyplot(fig)
+        
+            # =========================
+            # CASE 3: >2 UNITS → MULTIPLE CHARTS
+            # =========================
+            else:
+                st.info("Có nhiều hơn 2 đơn vị đo → tách thành nhiều biểu đồ.")
+                for unit, inds in groups.items():
+                    fig, ax = plt.subplots(figsize=(5, 2))
+                    for ind in inds:
+                        if ind in plot_df.columns:
+                            s = plot_df[ind].dropna()
+                            ax.plot(s.index, s.values, label=ind)
+        
+                    ax.yaxis.get_offset_text().set_fontsize(5)
+                    ax.grid(True)
+                    ax.tick_params(axis='both', labelsize=5)
+                    ax.legend(fontsize=5)
+                    ax.set_title(f"{title} ({unit})", fontsize=6)
+                    ax.xaxis.set_major_locator(MaxNLocator(integer=True))
+                    plt.xticks(rotation=45)
+                    st.pyplot(fig)
+    
+        # =========================
+        # 3. BUSINESS CYCLE BLOCK (IMF STYLE)
+        # =========================
+        st.markdown("#### 1️⃣ Business Cycle & Macro Stance")
+        
+        #st.markdown("##### 📐 IMF interpretation framework")
+        #st.latex(r"\text{Output gap} = \frac{Y - Y^*}{Y^*}")
+        #st.latex(r"\pi_t = \frac{CPI_t - CPI_{t-1}}{CPI_{t-1}}")
+        real_inds = df_real["indicator"].tolist()
+        gdp_growth_ind = st.selectbox(
+            "GDP growth (real, %)",
+            real_inds,key="bc_gdp_growth",
+            index=real_inds.index(find_indicator(df_real, ["gdp", "constant", "percent change"]))
+            if find_indicator(df_real, ["gdp", "constant", "percent change"]) in real_inds else 0
+        )
+    
+        inflation_ind = st.selectbox(
+            "Inflation (CPI, %)",
+            real_inds,key="bc_inflation",
+            index=real_inds.index(find_indicator(df_real, ["cpi", "percent change"]))
+            if find_indicator(df_real, ["cpi", "period average", "percent change"]) in real_inds else 0
+        )
+    
+        output_gap_ind = st.selectbox(
+            "Output gap (PF)",
+            real_inds,key="bc_output",
+            index=real_inds.index(find_indicator(df_real, ["output gap_pf"]))
+            if find_indicator(df_real, ["output gap_pf"]) in real_inds else 0
+        )
+        # ---- Tạo name_map ngay block ----
+        display_to_original = {
+            "GDP growth (%)": gdp_growth_ind,
+            "Inflation (%)": inflation_ind,
+            "Output gap (%)": output_gap_ind
+        }
+        
+        #---- Lấy series ----
+        bc_series = {}
+        for display_name, indicator_var in display_to_original.items():
+            series = get_series(df_real, indicator_var)
+            if series is not None:
+                bc_series[display_name] = series
+        
+        # ---- Align years ----
+        common_years = None
+        for s in bc_series.values():
+            common_years = s.index if common_years is None else common_years.intersection(s.index)
+        
+        bc_df = pd.DataFrame({
+            name: s.loc[common_years] for name, s in bc_series.items()
+        }).dropna()
+        bc_df.index = bc_df.index.astype(int)
+        
+        # ---- Raw table ----
+        st.markdown("##### 📊 Raw table")
+        st.dataframe(bc_df.round(2), use_container_width=True)
+    
+        # ---- Chart options ----
+        st.markdown("##### ⚙️ Chart options")
+    
+        bc_cols = st.multiselect(
+            "Select series to plot",
+            bc_df.columns.tolist(),
+            default=bc_df.columns.tolist(),
+            key="bc_plot_cols"
+        )
+    
+        min_year, max_year = int(bc_df.index.min()), int(bc_df.index.max())
+    
+        year_range = st.slider(
+            "Select year range",
+            min_year,
+            max_year,
+            (min_year, max_year),
+            key="bc_year_range"
+        )
+    
+        # ---- Filter ----
+        plot_df = bc_df.loc[
+            (bc_df.index >= year_range[0]) &
+            (bc_df.index <= year_range[1]),
+            bc_cols
+        ]
+    
+        # ---- Plot ----
+        st.markdown("##### 📈 Plots")
+        
+        if not plot_df.empty:
+            plot_fpp_chart(
+                plot_df,
+                unit_map=st.session_state.get("unit_map", {}),
+                display_to_original=display_to_original,
+                title="Business cycle indicators"
             )
 
-        df_fpp = pd.concat(
-            {
-                "S_I_GOV": series(fiscal_ind),
-                "CAB": series(cab_ind),
-                "GDP": series(gdp_ind)
-            },
-            axis=1
-        ).dropna()
-        
-        
-        df_fpp["S_I_PRIVATE"] = df_fpp["CAB"] - df_fpp["S_I_GOV"]
-        
-        df_fpp["CHECK"] = (
-            df_fpp["S_I_GOV"] + df_fpp["S_I_PRIVATE"] - df_fpp["CAB"]
-        )
     
-        st.markdown("📊 Flow of Funds")
-        st.line_chart(df_fpp[["S_I_GOV", "S_I_PRIVATE", "CAB"]])
-        st.markdown("📌 Consistency check (Core IMF test)")
-        # STEP 4 – Consistency check (Core IMF test)
-        """Nếu ≠ 0 → scenario macro không nhất quán"""
-        st.dataframe(df_fpp, use_container_width=True)
-
-        # STEP 5 – Policy blocks
-        st.markdown("📌 Fiscal Policy Block")
-
-        rev_candidates = df_long[
-            (df_long["sector"] == 3) &
-            (df_long["indicator"].str.contains("Revenue", case=False)) &
-            (df_long["indicator"].str.contains("Percent of GDP", case=False))
-        ]["indicator"].unique()
+        # ---- Diagnostics ----
+        st.markdown("##### 🧠 Diagnostics")
+    
+        last = bc_df.iloc[-1]
+    
+        if "Output gap (%)" in last and last["Output gap (%)"] > 0:
+            st.info("Economy above potential: positive output gap.")
+    
+        if "Output gap (%)" in last and last["Output gap (%)"] < 0:
+            st.warning("Economy below potential: negative output gap.")
+    
+        if "Inflation (%)" in last and "GDP growth (%)" in last:
+            if last["Inflation (%)"] > 5 and last["GDP growth (%)"] < 2:
+                st.warning("Stagflation risk: high inflation with weak growth.")
+    
         
-        exp_candidates = df_long[
-            (df_long["sector"] == 3) &
-            (df_long["indicator"].str.contains("Expenditure", case=False)) &
-            (df_long["indicator"].str.contains("Percent of GDP", case=False))
-        ]["indicator"].unique()
-        
-        rev_ind = st.selectbox("Government revenue (% GDP)", rev_candidates)
-        exp_ind = st.selectbox("Government expenditure (% GDP)", exp_candidates)
-
-        df_fiscal_block = pd.concat(
-            {
-                "Revenue": series(rev_ind),
-                "Expenditure": series(exp_ind),
-            },
-            axis=1
-        ).dropna()
-        
-        df_fiscal_block["Deficit"] = (
-            df_fiscal_block["Revenue"] - df_fiscal_block["Expenditure"]
-        )
-
-        
-        st.line_chart(df_fiscal_block[["Revenue", "Expenditure", "Deficit"]])
-        st.dataframe(df_fiscal_block, use_container_width=True)
 
         # =========================
-        # STEP 5 – Monetary Policy Block
+        # 4. FLOW OF FUNDS (IMF CORE IDENTITY)
         # =========================
-        st.markdown("📌 Monetary Policy Block")
-        st.subheader("Monetary identity (IMF)")
-        st.latex(r"\Delta M = \Delta NFA + \Delta NDA")
-
-        mon_candidates = df_long[df_long["sector"] == 4]["indicator"].unique()
+        st.markdown("#### 2️⃣ Flow of Funds")
         
-        # 🚨 CHECK PHẢI ĐẶT NGAY SAU KHI KHAI BÁO
-        if len(mon_candidates) == 0:
-            st.error("❌ Không có dữ liệu Monetary sector (sector = 4).")
-            st.stop()
-        
-        m2_candidates = [
-            x for x in mon_candidates
-            if ("Money" in x or "M2" in x)
-        ]
-        
-        nfa_candidates = [
-            x for x in mon_candidates
-            if "Net foreign assets" in x.lower()
-        ]
-        
-        nda_candidates = [
-            x for x in mon_candidates
-            if "Net domestic assets" in x.lower()
-        ]
-        
-        m2_ind = st.selectbox("Money supply (M2)", m2_candidates)
-        nfa_ind = st.selectbox("Net Foreign Assets (NFA)", nfa_candidates)
-        nda_ind = st.selectbox("Net Domestic Assets (NDA)", nda_candidates)
-        
-        df_monetary_block = pd.concat(
-            {
-                "M2": series(m2_ind),
-                "NFA": series(nfa_ind),
-                "NDA": series(nda_ind),
-            },
-            axis=1
-        ).dropna()
-        
-        # IMF identity: ΔM2 = ΔNFA + ΔNDA
-        df_monetary_block["CHECK"] = (
-            df_monetary_block["M2"].diff()
-            - df_monetary_block["NFA"].diff()
-            - df_monetary_block["NDA"].diff()
+        st.markdown("##### 📐 Accounting identity")
+        st.latex(r"(S - I)_{private} + (T - G) + (M - X) = 0")
+        st.latex(r"\Rightarrow Private\ Balance = CAB - Fiscal\ Balance")
+        ext_inds = df_ext["indicator"].tolist()
+        cab_ind = st.selectbox(
+            "Current Account Balance (% GDP)",
+            ext_inds,key="ff_CAB",
+            index=ext_inds.index(find_indicator(df_ext, ["current account", "percent of gdp"]))
+            if find_indicator(df_ext, ["current account", "percent of gdp"]) in ext_inds else 0
+        )
+        fiscal_inds = df_fiscal["indicator"].tolist()
+    
+        fiscal_balance_ind = st.selectbox(
+            "Fiscal balance (% GDP)",
+            fiscal_inds,key="ff_FB",
+            index=fiscal_inds.index("Net lending (+) / net borrowing (-), General government, Percent of GDP")
+            if "Net lending (+) / net borrowing (-), General government, Percent of GDP" in fiscal_inds else 0
         )
         
-        st.line_chart(df_monetary_block[["M2", "NFA", "NDA"]])
-        st.dataframe(df_monetary_block, use_container_width=True)
+        # ---- Mapping cục bộ cho block ----
+        display_to_original = {
+            "CAB (% GDP)": cab_ind,
+            "Fiscal balance (% GDP)": fiscal_balance_ind,
+        }
+        
+        # ---- Extract series ----
+        ff_series = {}
+        for display_name, indicator_var in display_to_original.items():
+            if display_name == "CAB (% GDP)":
+                s = get_series(df_ext, indicator_var)
+            else:
+                s = get_series(df_fiscal, indicator_var)
+        
+            if s is not None:
+                ff_series[display_name] = s
+        
+        # ---- Kiểm tra đủ series ----
+        if len(ff_series) == 2:
+        
+            # ---- Align years ----
+            common_years = None
+            for s in ff_series.values():
+                common_years = s.index if common_years is None else common_years.intersection(s.index)
+        
+            flow_df = pd.DataFrame({
+                name: s.loc[common_years]
+                for name, s in ff_series.items()
+            }).dropna()
+        
+            # ---- Residual ----
+            flow_df["Private balance (residual)"] = (
+                flow_df["CAB (% GDP)"] - flow_df["Fiscal balance (% GDP)"]
+            )
+        
+            flow_df.index = flow_df.index.astype(int)
+        
+            # ---- Raw table ----
+            st.markdown("##### 📊 Raw table")
+            st.dataframe(flow_df.round(2), use_container_width=True)
+        
+            # ---- Chart options ----
+            st.markdown("##### ⚙️ Chart options")
+        
+            cols = flow_df.columns.tolist()
+        
+            ff_cols = st.multiselect(
+                "Select series to plot",
+                cols,
+                default=cols,
+                key="ff_plot_cols"
+            )
+        
+            min_year, max_year = int(flow_df.index.min()), int(flow_df.index.max())
+        
+            year_range = st.slider(
+                "Select year range",
+                min_year,
+                max_year,
+                (min_year, max_year),
+                key="ff_year_range"
+            )
+        
+            # ---- Filter ----
+            plot_df = flow_df.loc[
+                (flow_df.index >= year_range[0]) &
+                (flow_df.index <= year_range[1]),
+                ff_cols
+            ]
+        
+            # ---- Plot ----
+            st.markdown("##### 📈 Plots")
+        
+            if not plot_df.empty:
+                plot_fpp_chart(
+                    plot_df,
+                    unit_map=st.session_state.get("unit_map", {}),
+                    display_to_original=display_to_original,
+                    title="Flow of Funds balances"
+                )
 
+            # ---- Diagnostics ----
+            st.markdown("##### 🧠 Diagnostics")
+        
+            last = flow_df.iloc[-1]
+        
+            if last["Fiscal balance (% GDP)"] < 0 and last["CAB (% GDP)"] < 0:
+                st.warning("Twin deficits: both fiscal and external balances are negative.")
+        
+            if abs(last["Private balance (residual)"]) > 5:
+                st.info("Large private sector imbalance detected.")
+
+    
+        # =========================
+        # 5. DEBT DYNAMICS (IMF STYLE)
+        # =========================
+        st.markdown("#### 3️⃣ Debt Dynamics")
+        
+        st.markdown("##### 📐 Standard IMF equation")
+        st.latex(r"b_t = \frac{1+r_t}{1+g_t} b_{t-1} - pb_t")
+        st.latex(r"\Delta b_t \approx (r_t - g_t)b_{t-1} - pb_t")
+        interp_debt_df = pd.DataFrame({
+            "Ký hiệu": ["b_t", "b_{t-1}", "r_t", "g_t", 
+                        "pb_t", "(r_t - g_t)b_{t-1}", "-pb_t"],
+            "Ý nghĩa": [
+                "Nợ công hiện tại (% GDP)",
+                "Nợ công năm trước (% GDP)",
+                "Lãi suất thực của nợ công",
+                "Tăng trưởng GDP thực",
+                "Cán cân ngân sách cơ bản (% GDP)",
+                "Snowball effect (hiệu ứng lăn tuyết)",
+                "Fiscal effect (tác động tài khóa)"
+            ],
+            "Diễn giải kinh tế": [
+                "Quy mô gánh nặng nợ của nền kinh tế",
+                "Cơ sở để nợ tăng/giảm trong năm nay",
+                "Chi phí vay nợ của chính phủ",
+                "Khả năng tăng thu nhập để trả nợ",
+                "Kỷ luật tài khóa hay kích thích tài khóa",
+                "Áp lực vĩ mô làm nợ phình to nếu r > g",
+                "Nếu pb dương → giảm nợ; nếu âm → tăng nợ"
+            ]
+        })
+        
+        st.markdown("###### 📘 Diễn giải phương trình nợ công")
+        st.dataframe(interp_debt_df, use_container_width=True)
 
         
-        st.markdown("📌 Debt Dynamics")
-        st.latex(r"\Delta Debt_t = Deficit_t + SFA_t")
-        st.latex(r"\Delta Debt_t \approx Deficit_t")
-
-        #Δdt​=pdt​+(r−g)dt−1​+sfat​
-        # Debt (% GDP)
-        debt_ind = st.selectbox(
-            "Government gross debt (% GDP)",
-            df_long[df_long["indicator"].str.contains("Gross debt", case=False)]["indicator"].unique()
-        )
-        
-        # Primary balance (% GDP)
-        pb_ind = st.selectbox(
+        # ---- Use mapped IMF variables ----
+        fiscal_inds = df_fiscal["indicator"].tolist()
+        real_inds = df_real["indicator"].tolist()
+        mon_inds = df_monetary["indicator"].tolist()
+        primary_balance_ind = st.selectbox(
             "Primary balance (% GDP)",
-            df_long[df_long["indicator"].str.contains("Primary balance", case=False)]["indicator"].unique()
+            fiscal_inds,key="dd_pb",
+            index=fiscal_inds.index(find_indicator(df_fiscal, ["primary", "percent of gdp"]))
+            if find_indicator(df_fiscal, ["primary", "percent of gdp"]) in fiscal_inds else 0
         )
-        
-        # Nominal GDP growth (%)
-        g_ind = st.selectbox(
-            "Nominal GDP growth (%)",
-            df_long[
-                (df_long["indicator"].str.contains("GDP")) &
-                (df_long["indicator"].str.contains("growth", case=False))
-            ]["indicator"].unique()
-        )
-        
-        # Effective interest rate (%)
-        r_ind = st.selectbox(
-            "Effective interest rate (%)",
-            df_long[df_long["indicator"].str.contains("interest", case=False)]["indicator"].unique()
-        )
-        
-        df_debt = pd.concat(
-            {
-                "d": series(debt_ind),      # debt/GDP
-                "pd": series(pb_ind),       # primary deficit/GDP
-                "g": series(g_ind) / 100,   # đổi về dạng thập phân
-                "r": series(r_ind) / 100,
-            },
-            axis=1
-        ).dropna()
-        
-        # Tính Debt Dynamics IMF
-        df_debt["d_lag"] = df_debt["d"].shift(1)
-
-        df_debt["Debt_change"] = df_debt["d"] - df_debt["d_lag"]
-        
-        df_debt["IMF_rhs"] = (
-            df_debt["pd"]
-            + (df_debt["r"] - df_debt["g"]) * df_debt["d_lag"]
-        )
-        
-        # SFA (residual)
-        df_debt["SFA"] = df_debt["Debt_change"] - df_debt["IMF_rhs"]
-
-        
     
-        st.markdown("📌 Consistency check (chuẩn IMF)")
-        st.latex(
-            r"\Delta d_t = pd_t + (r_t - g_t)d_{t-1} + sfa_t"
-        )
-        """SFA ≈ 0 → accounting clean
-        SFA lớn → có privatization, FX revaluation, bank recapitalization, off-budget ops """
-        
-        st.dataframe(
-            df_debt[["d", "pd", "r", "g", "Debt_change", "IMF_rhs", "SFA"]],
-            use_container_width=True
+        debt_ind = st.selectbox(
+            "Public debt (% GDP)",
+            fiscal_inds,key="dd_public",
+            index=fiscal_inds.index(find_indicator(df_fiscal, ["gross debt", "percent of gdp"]))
+            if find_indicator(df_fiscal, ["gross debt", "percent of gdp"]) in fiscal_inds else 0
         )
         
-        st.line_chart(
-            df_debt[["Debt_change", "pd", "IMF_rhs", "SFA"]]
+        gdp_growth_ind = st.selectbox(
+            "GDP growth (real, %)",
+            real_inds,key="dd_gdpg",
+            index=real_inds.index(find_indicator(df_real, ["gdp", "constant", "percent change"]))
+            if find_indicator(df_real, ["gdp", "constant", "percent change"]) in real_inds else 0
         )
+        policy_rate_ind = st.selectbox(
+            "Policy rate (%)",
+            mon_inds,key="dd_rate",
+            index=mon_inds.index(find_indicator(df_monetary, ["policy", "rate"]))
+            if find_indicator(df_monetary, ["policy", "rate"]) in mon_inds else 0
+        )
+        
+        # ---- Local mapping ----
+        display_to_original = {
+            "Debt (% GDP)": debt_ind,
+            "Primary balance (% GDP)": primary_balance_ind,
+            "GDP growth (%)": gdp_growth_ind,
+            "Policy rate (%)": policy_rate_ind
+        }
+
+        
+        # ---- Extract series ----
+        dd_series = {}
+        
+        debt_s = get_series(df_fiscal, debt_ind)
+        pb_s = get_series(df_fiscal, primary_balance_ind)
+        growth_s = get_series(df_real, gdp_growth_ind)
+        rate_s = get_series(df_monetary, policy_rate_ind)
+
+        if rate_s is not None:
+            dd_series["Policy rate (%)"] = rate_s
+
+        if debt_s is not None:
+            dd_series["Debt (% GDP)"] = debt_s
+        
+        if pb_s is not None:
+            dd_series["Primary balance (% GDP)"] = pb_s
+        
+        if growth_s is not None:
+            dd_series["GDP growth (%)"] = growth_s
+        
+        if len(dd_series) > 0:
+        
+            # ---- Align years ----
+            common_years = None
+            for s in dd_series.values():
+                common_years = s.index if common_years is None else common_years.intersection(s.index)
+        
+            dd_df = pd.DataFrame({
+                name: s.loc[common_years] for name, s in dd_series.items()
+            }).dropna()
+        
+            dd_df.index = dd_df.index.astype(int)
+        
+            # ---- Decomposition (approximate) ----
+            if all(x in dd_df.columns for x in ["Debt (% GDP)", "GDP growth (%)", "Policy rate (%)"]):
+                dd_df["b(t-1)"] = dd_df["Debt (% GDP)"].shift(1)
+                dd_df["g"] = dd_df["GDP growth (%)"] / 100
+                dd_df["r"] = dd_df["Policy rate (%)"] / 100
+                
+                dd_df["Snowball effect"] = (dd_df["r"] - dd_df["g"]) * dd_df["b(t-1)"]
+
+            # Fiscal effect and snowball effect
+            if "Primary balance (% GDP)" in dd_df:
+                dd_df["Fiscal effect"] = - dd_df["Primary balance (% GDP)"]
+            
+            if "Snowball effect" in dd_df and "Fiscal effect" in dd_df:
+                dd_df["Δ Debt"] = dd_df["Snowball effect"] + dd_df["Fiscal effect"]
+            
+            # Sau khi tính snowball và fiscal effect
+            dd_df = dd_df.dropna(subset=["Snowball effect", "Fiscal effect", "Δ Debt"])
+
+            # ---- Raw table ----
+            st.markdown("##### 📊 Raw table")
+            st.dataframe(dd_df, use_container_width=True)
+                        
+            # ---- Chart options ----
+            st.markdown("##### ⚙️ Chart options")
+            # vẽ đồ thị decomposition
+            min_year_d, max_year_d = int(dd_df.index.min()), int(dd_df.index.max())
+
+            debt_decomp_year_range = st.slider(
+                "Select year range (ΔDebt decomposition)",
+                min_year_d,
+                max_year_d,
+                (min_year_d, max_year_d),
+                key="debt_decomp_year_range"
+            )
+            
+            plot_debt_decomp_df = dd_df.loc[
+                (dd_df.index >= debt_decomp_year_range[0]) &
+                (dd_df.index <= debt_decomp_year_range[1])
+            ]
+
+            def plot_debt_decomposition(decomp_df, title="ΔDebt decomposition"):
+                fig, ax = plt.subplots(figsize=(5, 2))
+            
+                ax.bar(
+                    decomp_df.index,
+                    decomp_df["Snowball effect"],
+                    label="Snowball effect"
+                )
+            
+                ax.bar(
+                    decomp_df.index,
+                    decomp_df["Fiscal effect"],
+                    bottom=decomp_df["Snowball effect"],
+                    label="Fiscal effect"
+                )
+            
+                ax.plot(
+                    decomp_df.index,
+                    decomp_df["Δ Debt"],
+                    linestyle="--",
+                    label="ΔDebt (approx)"
+                )
+            
+                ax.yaxis.get_offset_text().set_fontsize(5)
+                ax.legend(fontsize=5)
+                ax.grid(True)
+                ax.tick_params(axis='both', labelsize=5)
+                ax.set_title(title, fontsize=6)
+            
+                st.pyplot(fig)
+                
+            if not plot_debt_decomp_df.empty:
+                plot_debt_decomposition(plot_debt_decomp_df, title="ΔDebt = Snowball + Fiscal")
+
+            # vẽ đồ thị các chỉ tiêu        
+            dd_cols = st.multiselect(
+                "Select series to plot",
+                dd_df.columns.tolist(),
+                default=["Debt (% GDP)"],
+                key="dd_plot_cols"
+            )
+        
+            min_year, max_year = int(dd_df.index.min()), int(dd_df.index.max())
+        
+            year_range = st.slider(
+                "Select year range",
+                min_year,
+                max_year,
+                (min_year, max_year),
+                key="dd_year_range"
+            )
+        
+            # ---- Filter ----
+            plot_df = dd_df.loc[
+                (dd_df.index >= year_range[0]) &
+                (dd_df.index <= year_range[1]),
+                dd_cols
+            ]
+        
+            # ---- Plot ----
+            st.markdown("##### 📈 Plots")
+        
+            if not plot_df.empty:
+                
+                plot_fpp_chart(
+                    plot_df,
+                    unit_map=st.session_state.get("unit_map", {}),
+                    display_to_original=display_to_original,
+                    title="Debt dynamics"
+                )
+                      
+            # ---- Diagnostics ----
+            st.markdown("##### 🧠 Diagnostics")
+        
+            last = dd_df.iloc[-1]
+        
+            if "Debt (% GDP)" in last and last["Debt (% GDP)"] > 60:
+                st.warning("High public debt level.")
+        
+            if "Δ Debt" in last and last["Δ Debt"] > 3:
+                st.info("Debt is rising rapidly.")
+
+
+        # PART 3 — Monetary Conditions + Risk Narrative Engine
+        # =========================
+        # 6. MONETARY CONDITIONS (IMF STYLE)
+        # =========================
+        st.markdown("#### 4️⃣ Monetary Conditions")
+        
+        st.markdown("##### 📐 Conceptual framework")
+        #st.latex(r"i_t - \pi_t \approx r_t")
+        st.latex(r"\Delta M = \Delta NFA + \Delta NDA")
+        
+        # ---- Pickers ----
+        mon_inds = df_monetary["indicator"].tolist()
+        
+        policy_rate_ind = st.selectbox(
+            "Policy rate (%)",
+            mon_inds,key="mon_rate",
+            index=mon_inds.index(find_indicator(df_monetary, ["policy", "rate"]))
+            if find_indicator(df_monetary, ["policy", "rate"]) in mon_inds else 0
+        )
+        
+        credit_ind = st.selectbox(
+            "Credit",
+            mon_inds,key="mon_credit",
+            index=mon_inds.index(find_indicator(df_monetary, ["credit"]))
+            if find_indicator(df_monetary, ["credit"]) in mon_inds else 0
+        )
+        
+        m2_ind = st.selectbox(
+            "Money supply (M2)",
+            mon_inds,key="mon_m2",
+            index=mon_inds.index(find_indicator(df_monetary, ["m2"]))
+            if find_indicator(df_monetary, ["m2"]) in mon_inds else 0
+        )
+        
+        nfa_ind = st.selectbox(
+            "Net Foreign Assets (NFA)",
+            mon_inds,
+            key="mon_nfa",
+            index=mon_inds.index(find_indicator(df_monetary, ["nfa"]))
+            if find_indicator(df_monetary, ["nfa"]) in mon_inds else 0
+        )
+        
+        nda_ind = st.selectbox(
+            "Net Domestic Assets (NDA)",
+            mon_inds,
+            key="mon_nda",
+            index=mon_inds.index(find_indicator(df_monetary, ["nda"]))
+            if find_indicator(df_monetary, ["nda"]) in mon_inds else 0
+        )
+        
+        # ---- Local mapping ----
+        display_to_original = {
+            "Policy rate": policy_rate_ind,
+            "Credit": credit_ind,
+            "Money (M2)": m2_ind,
+            "NFA": nfa_ind,
+            "NDA": nda_ind
+        }    
+        # ---- Extract series ----
+        mon_series = {}
+        
+        pr_s = get_series(df_monetary, policy_rate_ind)
+        cr_s = get_series(df_monetary, credit_ind)
+        m2_s = get_series(df_monetary, m2_ind)
+        nfa_s = get_series(df_monetary, nfa_ind)
+        nda_s = get_series(df_monetary, nda_ind)
+        
+        if nfa_s is not None:
+            mon_series["NFA"] = nfa_s
+        if nda_s is not None:
+            mon_series["NDA"] = nda_s
+        if pr_s is not None:
+            mon_series["Policy rate"] = pr_s
+        if cr_s is not None:
+            mon_series["Credit"] = cr_s
+        if m2_s is not None:
+            mon_series["Money (M2)"] = m2_s
+        
+        if len(mon_series) > 0:
+        
+            # ---- Align years ----
+            common_years = None
+            for s in mon_series.values():
+                common_years = s.index if common_years is None else common_years.intersection(s.index)
+        
+            mon_df = pd.DataFrame({
+                name: s.loc[common_years]
+                for name, s in mon_series.items()
+            }).dropna()
+        
+            mon_df.index = mon_df.index.astype(int)
+            # ---- Raw table ----
+            
+            st.markdown("##### 📊 Raw table")
+            st.dataframe(mon_df.round(2), use_container_width=True)
+            
+            delta_df = mon_df.diff().dropna()
+            if all(x in delta_df.columns for x in ["Money (M2)", "NFA", "NDA"]):
+                decomp_df = pd.DataFrame({
+                    "ΔM2": delta_df["Money (M2)"],
+                    "ΔNFA": delta_df["NFA"],
+                    "ΔNDA": delta_df["NDA"]
+                })
+        
+                decomp_df["Residual"] = decomp_df["ΔM2"] - (decomp_df["ΔNFA"] + decomp_df["ΔNDA"])
+            st.markdown("##### 🔍 Monetary decomposition: ΔM = ΔNFA + ΔNDA")
+            st.dataframe(decomp_df.round(2), use_container_width=True)
+            
+            # ---- Decomposition plot ----
+            st.markdown("##### 📉 Decomposition plot")
+            st.markdown("###### 🧭 Tiền tăng là do đâu? (Interpretation guide)")
+
+            interp_df = pd.DataFrame({
+                "Trường hợp": [
+                    "ΔM tăng vì ΔNDA",
+                    "ΔM tăng vì ΔNFA",
+                    "ΔM giảm vì ΔNDA âm",
+                    "ΔM giảm vì ΔNFA âm",
+                ],
+                "Hàm ý": [
+                    "Kích cầu nội địa, tín dụng, tài khóa",
+                    "Dòng vốn ngoại vào, can thiệp FX",
+                    "Thắt chặt tiền tệ trong nước",
+                    "Chảy vốn ra / áp lực cán cân ngoại",
+                ]
+            })
+            
+            st.dataframe(interp_df, use_container_width=True)
+
+            min_year_d, max_year_d = int(decomp_df.index.min()), int(decomp_df.index.max())
+            
+            decomp_year_range = st.slider(
+                "Select year range (ΔM decomposition)",
+                min_year_d,
+                max_year_d,
+                (min_year_d, max_year_d),
+                key="mon_decomp_year_range"
+            )
+            
+            plot_decomp_df = decomp_df.loc[
+                (decomp_df.index >= decomp_year_range[0]) &
+                (decomp_df.index <= decomp_year_range[1])
+            ]
+            
+            def plot_monetary_decomposition(decomp_df, title="ΔM = ΔNFA + ΔNDA"):
+                fig, ax = plt.subplots(figsize=(5, 2))
+            
+                ax.bar(decomp_df.index, decomp_df["ΔNFA"], label="ΔNFA")
+                ax.bar(decomp_df.index, decomp_df["ΔNDA"], bottom=decomp_df["ΔNFA"], label="ΔNDA")
+            
+                ax.plot(decomp_df.index, decomp_df["ΔM2"], linestyle="--", label="ΔM2")
+                ax.yaxis.get_offset_text().set_fontsize(5)
+                ax.legend(fontsize=5)
+                ax.grid(True)
+                ax.tick_params(axis='both', labelsize=5)
+                ax.set_title(title, fontsize=6)
+                #plt.xticks(rotation=45)
+            
+                st.pyplot(fig)
+            
+            if not plot_decomp_df.empty:
+                plot_monetary_decomposition(plot_decomp_df)
+
+            
+            # ---- Chart options ----
+            st.markdown("##### ⚙️ Chart options")
+            mon_cols = st.multiselect(
+                "Select series to plot",
+                mon_df.columns.tolist(),
+                default=mon_df.columns.tolist(),
+                key="mon_plot_cols"
+            )
+        
+            min_year, max_year = int(mon_df.index.min()), int(mon_df.index.max())
+            
+            year_range = st.slider(
+                "Select year range",
+                min_year,
+                max_year,
+                (min_year, max_year),
+                key="mon_year_range"
+            )
+        
+            # ---- Filter ----
+            plot_df = mon_df.loc[
+                (mon_df.index >= year_range[0]) &
+                (mon_df.index <= year_range[1]),
+                mon_cols
+            ]
+        
+            # ---- Plot ----
+            st.markdown("##### 📈 Plots")
+        
+            if not plot_df.empty:
+                plot_fpp_chart(
+                    plot_df,
+                    unit_map=st.session_state.get("unit_map", {}),
+                    display_to_original=display_to_original,
+                    title="Monetary conditions"
+                )
+
+            # ---- Diagnostics ----
+            st.markdown("##### 🧠 Diagnostics")
+            
+            last = mon_df.iloc[-1]
+            prev = mon_df.iloc[-2] if len(mon_df) >= 2 else None
+            
+            # ---- Credit dynamics ----
+            if "Credit" in last and prev is not None:
+                if last["Credit"] > prev["Credit"]:
+                    st.success("Credit expansion detected.")
+                else:
+                    st.warning("Credit growth slowing.")
+            
+            # ---- Policy stance ----
+            if "Policy rate" in last and prev is not None:
+                if last["Policy rate"] > prev["Policy rate"]:
+                    st.warning("Monetary tightening.")
+                else:
+                    st.info("Monetary easing.")
+            
+            # ---- Monetary source diagnostics: ΔM = ΔNFA + ΔNDA ----
+            if all(x in mon_df.columns for x in ["Money (M2)", "NFA", "NDA"]) and len(mon_df) >= 2:
+                delta = mon_df.diff().iloc[-1]
+            
+                dM = delta["Money (M2)"]
+                dNFA = delta["NFA"]
+                dNDA = delta["NDA"]
+            
+                # Direction of monetary conditions
+                if dM > 0:
+                    st.success("Net monetary expansion.")
+                else:
+                    st.warning("Net monetary contraction.")
+            
+                # Source of money creation
+                if abs(dNDA) > abs(dNFA):
+                    if dNDA > 0:
+                        st.info("Money growth is mainly driven by domestic credit expansion (ΔNDA).")
+                    else:
+                        st.warning("Domestic deleveraging is the main drag on money supply (ΔNDA).")
+                else:
+                    if dNFA > 0:
+                        st.info("Money growth is mainly driven by foreign inflows / reserve accumulation (ΔNFA).")
+                    else:
+                        st.warning("Capital outflows or FX interventions are draining liquidity (ΔNFA).")
+            
+                # Consistency check
+                residual = dM - (dNFA + dNDA)
+                if abs(residual) > 0.05 * abs(dM):
+                    st.warning("⚠️ Monetary identity shows large residual — possible data inconsistency.")
+
+   
+        # =========================
+        # 7. IMF-STYLE RISK NARRATIVE ENGINE
+        # =========================
+        st.markdown("#### 5️⃣ IMF-style Risk Narrative")
+        
+        # ---- Pickers ----
+        st.markdown("##### 🎯 Variable selection")
+        
+        real_inds = df_real["indicator"].tolist()
+        fiscal_inds = df_fiscal["indicator"].tolist()
+        ext_inds = df_ext["indicator"].tolist()
+        
+        inflation_ind = st.selectbox(
+            "Inflation (CPI, %)",
+            real_inds,key="nar_inflation",
+            index=real_inds.index(find_indicator(df_real, ["cpi", "percent change"]))
+            if find_indicator(df_real, ["cpi", "period average", "percent change"]) in real_inds else 0
+        )
+    
+        output_gap_ind = st.selectbox(
+            "Output gap (PF)",
+            real_inds,key="nar_output",
+            index=real_inds.index(find_indicator(df_real, ["output gap_pf"]))
+            if find_indicator(df_real, ["output gap_pf"]) in real_inds else 0
+        )
+        
+        debt_ind = st.selectbox(
+            "Public debt (% GDP)",
+            fiscal_inds,key="nar_public",
+            index=fiscal_inds.index(find_indicator(df_fiscal, ["gross debt", "percent of gdp"]))
+            if find_indicator(df_fiscal, ["gross debt", "percent of gdp"]) in fiscal_inds else 0
+        )
+        
+        cab_ind = st.selectbox(
+            "Current account (% GDP)",
+            ext_inds,key="nar_CA",
+            index=ext_inds.index(find_indicator(df_ext, ["current account", "percent of gdp"]))
+            if find_indicator(df_ext, ["current account", "percent of gdp"]) in ext_inds else 0
+        )
+        
+        # ---- Extract series ----
+        series_dict = {}
+        
+        og_s = get_series(df_real, output_gap_ind)
+        inf_s = get_series(df_real, inflation_ind)
+        debt_s = get_series(df_fiscal, debt_ind)
+        cab_s = get_series(df_ext, cab_ind)
+        
+        if og_s is not None:
+            series_dict["Output gap"] = og_s
+        if inf_s is not None:
+            series_dict["Inflation"] = inf_s
+        if debt_s is not None:
+            series_dict["Public debt"] = debt_s
+        if cab_s is not None:
+            series_dict["Current account"] = cab_s
+        
+        if len(series_dict) >= 1:
+        
+            # ---- Align years ----
+            common_years = None
+            for s in series_dict.values():
+                common_years = s.index if common_years is None else common_years.intersection(s.index)
+        
+            nar_df = pd.DataFrame({
+                name: s.loc[common_years]
+                for name, s in series_dict.items()
+            }).dropna()
+        
+            nar_df.index = nar_df.index.astype(int)
+        
+            # ---- Raw table ----
+            st.markdown("##### 📊 Raw table")
+            st.dataframe(nar_df.round(2), use_container_width=True)
+        
+            # ---- Chart options ----
+            st.markdown("##### ⚙️ Chart options")
+        
+            nar_cols = st.multiselect(
+                "Select indicators for narrative engine",
+                nar_df.columns.tolist(),
+                default=nar_df.columns.tolist(),
+                key="nar_plot_cols"
+            )
+        
+            min_year, max_year = int(nar_df.index.min()), int(nar_df.index.max())
+        
+            year_range = st.slider(
+                "Select year range",
+                min_year,
+                max_year,
+                (min_year, max_year),
+                key="nar_year_range"
+            )
+        
+            plot_df = nar_df.loc[
+                (nar_df.index >= year_range[0]) &
+                (nar_df.index <= year_range[1]),
+                nar_cols
+            ]
+        
+            # ---- Plot ----
+            st.markdown("##### 📈 Plots")
+        
+            if not plot_df.empty:
+                plot_fpp_chart(
+                    plot_df,
+                    unit_map=st.session_state.get("unit_map", {}),
+                    display_to_original=display_to_original,
+                    title="Risk-relevant macro indicators"
+                )
+                
+            # ---- IMF-style narrative rules ----
+            st.markdown("##### 🧠 Narrative")
+        
+            last = nar_df.iloc[-1]
+            narrative = []
+        
+            if "Output gap" in last:
+                if last["Output gap"] > 0:
+                    narrative.append("The economy is operating above potential, indicating demand-side pressures.")
+                else:
+                    narrative.append("The economy is operating below potential, suggesting economic slack.")
+        
+            if "Inflation" in last:
+                if last["Inflation"] > 4:
+                    narrative.append("Inflationary pressures remain elevated.")
+                else:
+                    narrative.append("Inflation appears contained.")
+        
+            if "Public debt" in last:
+                if last["Public debt"] > 60:
+                    narrative.append("Public debt is elevated, raising sustainability concerns.")
+        
+            if "Current account" in last:
+                if last["Current account"] < 0:
+                    narrative.append("The external position shows a current account deficit.")
+        
+            if len(narrative) == 0:
+                st.info("Not enough information to generate narrative.")
+            else:
+                st.write(" ".join(narrative))
+
+        # =========================
+        # 8. BASELINE vs ALTERNATIVE SCENARIOS
+        # =========================
+        st.markdown("#### 6️⃣ Baseline vs Alternative Scenario")
+        
+        if len(series_dict) >= 1:
+        
+            scenario_var = st.selectbox(
+                "Select variable for scenario analysis",
+                nar_df.columns.tolist(),
+                key="scenario_var"
+            )
+        
+            baseline = nar_df[scenario_var]
+        
+            st.markdown("##### ⚙️ Alternative scenario assumptions")
+        
+            shock_type = st.selectbox(
+                "Shock type",
+                ["Level shock", "Growth shock"],
+                key="shock_type"
+            )
+        
+            shock_start = st.selectbox(
+                "Shock starting year",
+                baseline.index.tolist(),
+                key="shock_start"
+            )
+        
+            shock_size = st.slider(
+                "Shock size",
+                -10.0,
+                10.0,
+                0.0,
+                step=0.5,
+                key="shock_size"
+            )
+        
+            alt = baseline.copy()
+        
+            if shock_type == "Level shock":
+                alt.loc[alt.index >= shock_start] = alt.loc[alt.index >= shock_start] + shock_size
+        
+            elif shock_type == "Growth shock":
+                for i in range(1, len(alt)):
+                    if alt.index[i] >= shock_start:
+                        alt.iloc[i] = alt.iloc[i-1] * (1 + shock_size / 100)
+        
+            # ---- Plot ----
+            st.markdown("##### 📈 Baseline vs Alternative")
+        
+            fig, ax = plt.subplots(figsize=(5, 2))
+        
+            ax.plot(baseline.index, baseline.values, label="Baseline")
+            ax.plot(alt.index, alt.values, linestyle="--", label="Alternative")
+        
+            
+            ax.xaxis.set_major_locator(MaxNLocator(integer=True))
+            ax.legend(fontsize=5)
+            ax.grid(True)
+            ax.tick_params(axis='both', labelsize=5)
+            plt.xticks(rotation=45)
+            st.pyplot(fig)
+

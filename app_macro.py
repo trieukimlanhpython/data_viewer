@@ -670,7 +670,12 @@ fp_file = st.sidebar.file_uploader(
 )
 
 # Đường dẫn mặc định nếu không upload
-default_fp_file = '/Users/trieukimlanh/Library/CloudStorage/OneDrive-Personal/0. Research Projects onedrive/Macroeconomic reports/Tập 16/Vietnam FPP.csv'
+#default_fp_file = '/Users/trieukimlanh/Library/CloudStorage/OneDrive-Personal/0. Research Projects onedrive/Macroeconomic reports/Tập 16/Vietnam FPP.csv'
+from pathlib import Path
+import pandas as pd
+
+BASE_DIR = Path(__file__).resolve().parent
+default_fp_file = BASE_DIR / "Vietnam FPP.csv"
 
 # Nút tải dữ liệu
 if st.sidebar.button("🚀 Tải dữ liệu FP"):
